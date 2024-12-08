@@ -35,15 +35,11 @@ class FaceDetectionRepository @Inject constructor(
     }
     
      fun detectFaces(image: Bitmap): List<Rect> {
-         // Convert Bitmap to MPImage
          val mpImage = BitmapImageBuilder(image).build()
         
-         // Process the image using FaceLandmarker
          val results: FaceLandmarkerResult = faceLandmarker.detect(mpImage)
         
-         // Extract bounding boxes from the detected landmarks
          return results.faceLandmarks().mapNotNull { faceLandmarks ->
-             // Use landmarks to calculate bounding boxes
              val xs = faceLandmarks.map { it.x() }
              val ys = faceLandmarks.map { it.y() }
              val left = xs.minOrNull()?.toInt() ?: return@mapNotNull null

@@ -40,16 +40,14 @@ class GalleryRepository @Inject constructor(
         val contentResolver: ContentResolver = context.contentResolver
         return try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                // Use ImageDecoder for newer devices
                 val source = ImageDecoder.createSource(contentResolver, uri)
                 ImageDecoder.decodeBitmap(source)
             } else {
-                // Use MediaStore for older devices
                 MediaStore.Images.Media.getBitmap(contentResolver, uri)
             }
         } catch (e: IOException) {
             e.printStackTrace()
-            null // Return null if loading fails
+            null
         }
     }
 }

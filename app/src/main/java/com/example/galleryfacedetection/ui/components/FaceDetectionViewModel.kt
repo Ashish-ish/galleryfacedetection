@@ -37,7 +37,7 @@ class FaceDetectionViewModel @Inject constructor(
             val facesMap = mutableMapOf<Uri, List<Rect>>()
 
             images.forEach { imageUri ->
-                val bitmap = galleryRepository.loadBitmapFromUri(imageUri) // Create method for loading Bitmap
+                val bitmap = galleryRepository.loadBitmapFromUri(imageUri)
                 bitmap?.let {
                     val faces = faceDetectionRepository.detectFaces(bitmap)
                     facesMap[imageUri] = faces

@@ -4,16 +4,10 @@ import android.net.Uri
 import android.util.Log
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.example.facedetection.ui.components.ImageWithBoundingBoxes
-import com.example.facedetection.ui.components.LoadingScreen
-import com.example.facedetection.ui.components.PermissionHandler
-import com.example.facedetection.viewmodel.FaceDetectionViewModel
 
 @Composable
 fun FaceDetectionScreen(viewModel: FaceDetectionViewModel = hiltViewModel()) {
@@ -29,7 +23,8 @@ fun FaceDetectionScreen(viewModel: FaceDetectionViewModel = hiltViewModel()) {
         LoadingScreen()
     } else {
         LazyColumn(modifier = Modifier.fillMaxSize()) {
-            items(galleryImages) { imageUri ->
+            items(galleryImages.size) { imageIndex ->
+                val imageUri = galleryImages[imageIndex]
                 val imageFaces = faces[imageUri] ?: emptyList()
                 ImageWithBoundingBoxes(
                     imageUri = imageUri,
