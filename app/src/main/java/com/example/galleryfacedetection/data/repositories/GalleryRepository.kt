@@ -4,6 +4,7 @@ import android.content.ContentResolver
 import android.content.ContentUris
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.ImageDecoder
 import android.net.Uri
 import android.os.Build
@@ -13,62 +14,105 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @Singleton
 class GalleryRepository @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
-    var limit = 15
-    fun fetchGalleryImages(page: Int = 1): List<Uri> {
+    private val limit = 15
+
+    // Fetch gallery images in batches
+    fun fetchGalleryImages(page: Int = 1, fromCameraRoll: Boolean = false): List<Uri> {
         val images = mutableListOf<Uri>()
+
         val projection = arrayOf(MediaStore.Images.Media._ID)
+
+        // Define the selection query based on whether we want to fetch from camera roll or general gallery
+        val selection = if (fromCameraRoll) {
+            "${MediaStore.Images.Media.BUCKET_DISPLAY_NAME} = ?"
+        } else {
+            null // No filter for general gallery
+        }
+
+        val selectionArgs = if (fromCameraRoll) {
+            arrayOf("Camera")
+        } else {
+            null
+        }
+
         val cursor = context.contentResolver.query(
             MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-            projection, null, null, "DATE_MODIFIED ASC"
+            projection, selection, selectionArgs, "DATE_MODIFIED ASC"
         )
-        val oldCounter = (page-1)*limit
-        var counter = (page)*limit
-        val nextPage = (page+1)*limit
+
+        val oldCounter = (page - 1) * limit
+
         cursor?.use {
             val idColumn = it.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
             it.moveToPosition(oldCounter)
-            while (it.moveToNext() && counter>oldCounter && counter < nextPage) {
+            while (it.moveToNext() && images.size < limit) {
                 val id = it.getLong(idColumn)
                 val uri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id)
                 images.add(uri)
-                counter--
             }
         }
         return images
     }
 
-    fun loadBitmapFromUri(uri: Uri): Bitmap? {
-        val contentResolver: ContentResolver = context.contentResolver
-        val bitmap = try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                val source = ImageDecoder.createSource(contentResolver, uri)
-                ImageDecoder.decodeBitmap(source)
-            } else {
-                MediaStore.Images.Media.getBitmap(contentResolver, uri)
-            }
-        } catch (e: IOException) {
-            e.printStackTrace()
-            null
-        }
+    // Load bitmap on a background thread
+    suspend fun loadBitmapFromUri(uri: Uri, targetWidth: Int = 300, targetHeight: Int = 300): Bitmap? {
+        return withContext(Dispatchers.IO) { // Switch to background thread
+            try {
+                val bitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    val source = ImageDecoder.createSource(context.contentResolver, uri)
+                    ImageDecoder.decodeBitmap(source) { decoder, _, _ ->
+                        decoder.setTargetSize(targetWidth, targetHeight) // Resize to target dimensions
+                    }
+                } else {
+                    val options = BitmapFactory.Options().apply {
+                        inJustDecodeBounds = true
+                        context.contentResolver.openInputStream(uri)?.use {
+                            BitmapFactory.decodeStream(it, null, this)
+                        }
+                        inSampleSize = calculateInSampleSize(this, targetWidth, targetHeight)
+                        inJustDecodeBounds = false
+                    }
+                    context.contentResolver.openInputStream(uri)?.use {
+                        BitmapFactory.decodeStream(it, null, options)
+                    }
+                }
 
-        bitmap?.let {
-          return ensureBitmapConfig(it)
+                bitmap?.let { ensureBitmapConfig(it) }
+            } catch (e: IOException) {
+                e.printStackTrace()
+                null
+            }
         }
-        return bitmap
     }
 
-    fun ensureBitmapConfig(bitmap: Bitmap): Bitmap {
-        // Check if the Bitmap is already in ARGB_8888 format
+    // Ensure the bitmap is in ARGB_8888 format
+    private fun ensureBitmapConfig(bitmap: Bitmap): Bitmap {
         return if (bitmap.config == Bitmap.Config.ARGB_8888) {
             bitmap
         } else {
-            // Convert the Bitmap to ARGB_8888
             bitmap.copy(Bitmap.Config.ARGB_8888, true)
         }
+    }
+
+    // Calculate sample size for downscaling
+    private fun calculateInSampleSize(options: BitmapFactory.Options, reqWidth: Int, reqHeight: Int): Int {
+        val (height: Int, width: Int) = options.run { outHeight to outWidth }
+        var inSampleSize = 1
+
+        if (height > reqHeight || width > reqWidth) {
+            val halfHeight: Int = height / 2
+            val halfWidth: Int = width / 2
+            while ((halfHeight / inSampleSize) >= reqHeight && (halfWidth / inSampleSize) >= reqWidth) {
+                inSampleSize *= 2
+            }
+        }
+        return inSampleSize
     }
 }

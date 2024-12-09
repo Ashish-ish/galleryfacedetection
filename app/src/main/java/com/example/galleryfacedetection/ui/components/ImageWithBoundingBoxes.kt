@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -19,6 +20,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -34,15 +36,16 @@ import coil3.compose.rememberAsyncImagePainter
 @Composable
 fun ImageWithBoundingBoxes(
     imageUri: Uri,
-    faces: List<Rect>, // Bounding boxes in original image dimensions
+    faces: List<Rect>,
     originalImageWidth: Int,
     originalImageHeight: Int,
     onTag: (Rect, String) -> Unit
 ) {
     val taggingState = remember { mutableStateOf<Rect?>(null) }
     val tagName = remember { mutableStateOf("") }
+    val taggedFaces = remember { mutableStateListOf<Pair<Rect, String>>() } // Store tagged faces with tags
 
-    // Dimensions of each grid cell
+    // Calculate display dimensions for each grid cell
     val displayWidth = LocalContext.current.resources.displayMetrics.widthPixels / 3f
     val displayHeight = 200.dp.value // Convert dp to pixels for calculations
 
@@ -53,12 +56,7 @@ fun ImageWithBoundingBoxes(
             .background(Color.LightGray, RoundedCornerShape(8.dp))
     ) {
         // Display the image
-        androidx.compose.foundation.Image(
-            painter = rememberAsyncImagePainter(imageUri),
-            contentDescription = null,
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Fit, // Crop the image to fit the grid cell
-        )
+        OptimizedImage(imageUri)
 
         // Draw bounding boxes
         faces.forEach { face ->
@@ -70,43 +68,70 @@ fun ImageWithBoundingBoxes(
                 cellHeight = displayHeight
             )
 
-            Log.d(
-                "ScaledBox",
-                "Left=${scaledBox.left}, Top=${scaledBox.top}, Right=${scaledBox.right}, Bottom=${scaledBox.bottom}, CellWidth=$displayWidth, CellHeight=$displayHeight"
-            )
-
             Box(
                 modifier = Modifier
-                    .offset(x = (scaledBox.left/ LocalContext.current.resources.displayMetrics.density).dp, y = (scaledBox.top).dp)
+                    .offset(
+                        x = (scaledBox.left / LocalContext.current.resources.displayMetrics.density).dp,
+                        y = (scaledBox.top).dp
+                    )
                     .size(
-                        width = ((scaledBox.right - scaledBox.left)/ LocalContext.current.resources.displayMetrics.density).dp,
-                        height = (scaledBox.bottom - scaledBox.top).dp
+                        width = ((scaledBox.right - scaledBox.left) / LocalContext.current.resources.displayMetrics.density).dp,
+                        height = ((scaledBox.bottom - scaledBox.top)).dp
                     )
                     .border(2.dp, Color.Red)
                     .clickable { taggingState.value = face }
             )
         }
 
-        // Text field for tagging
+        // Display tooltips for tagged faces
+        taggedFaces.forEach { (rect, tag) ->
+            val scaledBox = scaleRectForGridCell(
+                rect = rect,
+                originalWidth = originalImageWidth,
+                originalHeight = originalImageHeight,
+                cellWidth = displayWidth,
+                cellHeight = displayHeight
+            )
+
+            Box(
+                modifier = Modifier
+                    .offset(
+                        x = (scaledBox.left / LocalContext.current.resources.displayMetrics.density).dp,
+                        y = ((scaledBox.top).dp - 30.dp) // Position tooltip above bounding box
+                    )
+                    .background(Color.Black, RoundedCornerShape(4.dp))
+                    .padding(1.dp)
+                    .width(
+                        ((scaledBox.right - scaledBox.left) * displayWidth / (originalImageWidth)).dp
+                    )
+            ) {
+                Text(
+                    text = tag,
+                    color = Color.White,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+
+        // Transparent EditText for tagging
         taggingState.value?.let { selectedFace ->
-            TextField(
+            CompactTextInput(
                 value = tagName.value,
                 onValueChange = { tagName.value = it },
-                label = { Text("Enter tag") },
-                keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(
-                    onDone = {
-                        if (tagName.value.isNotBlank()) {
-                            onTag(selectedFace, tagName.value)
-                            taggingState.value = null
-                            tagName.value = ""
-                        }
+                placeholder = "Tag this face",
+                onDone = {
+                    if (tagName.value.isNotBlank()) {
+                        onTag(selectedFace, tagName.value)
+                        taggedFaces.add(selectedFace to tagName.value) // Add to tagged faces
+                        taggingState.value = null // Clear tagging state
+                        tagName.value = "" // Clear text input
                     }
-                ),
-                singleLine = true,
+                },
                 modifier = Modifier
-                    .offset(x = 16.dp, y = 16.dp)
-                    .background(Color.White, RoundedCornerShape(4.dp))
+                    .offset(
+                        x = 10.dp,
+                        y = ((selectedFace.top * displayHeight / originalImageHeight) / LocalContext.current.resources.displayMetrics.density).dp
+                    )
             )
         }
     }

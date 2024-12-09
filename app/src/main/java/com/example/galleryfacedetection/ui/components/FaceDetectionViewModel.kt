@@ -14,6 +14,8 @@ import com.example.galleryfacedetection.domain.ImageData
 import com.example.galleryfacedetection.domain.TaggedFace
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -33,50 +35,77 @@ class FaceDetectionViewModel @Inject constructor(
     private val _isLoading = MutableLiveData(true)
     val isLoading: LiveData<Boolean> = _isLoading
 
-    private val _isLoadingMore = MutableLiveData(true)
+    private val _isLoadingMore = MutableLiveData(false)
     val loadingMore: LiveData<Boolean> = _isLoadingMore
     val limit = 15
     var page = 1
-    fun loadGalleryImages() {
-        _isLoading.value = true
+
+    fun resetPagination() {
+        page = 1
+        _galleryImages.postValue(emptyList())
+        _detectedFaces.postValue(emptyMap())
+    }
+
+    fun loadGalleryImages(fromCameraGallery: Boolean = false, reset: Boolean = false) {
+
         if (page > 1) {
             _isLoadingMore.value = true
+        } else {
+            _isLoading.value = true
         }
+
         viewModelScope.launch(Dispatchers.IO) {
+
             val validImages = mutableListOf<ImageData>()
             val facesMap = mutableMapOf<Uri, List<Rect>>()
             while (validImages.size < limit) {
-                val nextImages = galleryRepository.fetchGalleryImages(page) // Fetch limit images at a time
+                val nextImages = galleryRepository.fetchGalleryImages(page, fromCameraGallery) // Fetch limit images at a time
                 page++
                 if (nextImages.isEmpty()) break // Stop if no more images are available
-
-                nextImages.forEach { imageUri ->
-                    val bitmap = galleryRepository.loadBitmapFromUri(imageUri)
-                    bitmap?.let {
-                        val faces = faceDetectionRepository.detectFaces(bitmap)
-                        if (faces.isNotEmpty()) {
-                            facesMap[imageUri] = faces
-                            val imageData = ImageData(imageUri, bitmap.height, bitmap.width)
-                            validImages.add(imageData)
+                val results = nextImages.map { imageUri ->
+                    async {
+                        val bitmap = galleryRepository.loadBitmapFromUri(imageUri)
+                        bitmap?.let {
+                            val faces = faceDetectionRepository.detectFaces(it)
+                            if (faces.isNotEmpty()) {
+                                Pair(imageUri, Pair(faces, bitmap))
+                            } else null
                         }
                     }
-                    if (validImages.size == limit) return@forEach // Stop if we already have 10 valid images
-                }
+                }.awaitAll()
+
+                validImages.addAll(results.filterNotNull().map { (uri, data) ->
+                    val (faces, bitmap) = data
+                    facesMap[uri] = faces
+                    ImageData(uri, bitmap.height, bitmap.width)
+                })
+                Log.d("validimages===",""+validImages.size)
             }
+            Log.d("_galleryImages===","completed")
             _galleryImages.value?.let {
                 _isLoadingMore.postValue(false)
+                Log.d("_galleryImages===",""+_isLoadingMore)
                 _galleryImages.postValue(it + validImages)
+                _detectedFaces.value?.let {
+                    _detectedFaces.postValue(it + facesMap)
+                }
+
             } ?: run {
+                Log.d("_galleryImages===","next")
                 _galleryImages.postValue(validImages)
+                _detectedFaces.postValue(facesMap)
+
             }
-            _detectedFaces.postValue(facesMap)
             _isLoading.postValue(false)
         }
     }
 
     fun tagFace(imageUri: Uri, rect: Rect, tag: String) {
-        val existingTags = taggingRepository.getTags(imageUri)?.toMutableList() ?: mutableListOf()
-        existingTags.add(TaggedFace(rect, tag))
-        taggingRepository.addTags(imageUri, existingTags)
+        viewModelScope.launch {
+            val existingTags = taggingRepository.getTags(imageUri.toString())?.toMutableList() ?: mutableListOf()
+            existingTags.add(TaggedFace(rect, tag))
+            taggingRepository.addTag(imageUri.toString(), existingTags)
+        }
+
     }
 }
