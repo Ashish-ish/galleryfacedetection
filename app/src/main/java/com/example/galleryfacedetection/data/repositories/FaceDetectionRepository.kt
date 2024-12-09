@@ -3,6 +3,7 @@ package com.example.galleryfacedetection.data.repositories
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Rect
+import android.util.Log
 import com.google.mediapipe.framework.image.BitmapImageBuilder
 import com.google.mediapipe.framework.image.MPImage
 import com.google.mediapipe.tasks.core.BaseOptions
@@ -24,11 +25,11 @@ class FaceDetectionRepository @Inject constructor(
         val options = FaceLandmarker.FaceLandmarkerOptions.builder()
             .setBaseOptions(
                 BaseOptions.builder()
-                    .setModelAssetPath("facelandmarker.task") // Add this model in your assets directory
+                    .setModelAssetPath("face_landmarker.task") // Add this model in your assets directory
                     .build()
             )
             .setRunningMode(RunningMode.IMAGE)
-            .setNumFaces(5) // Configure the maximum number of faces to detect
+            .setNumFaces(1)
             .build()
 
         faceLandmarker = FaceLandmarker.createFromOptions(context, options)
@@ -42,10 +43,14 @@ class FaceDetectionRepository @Inject constructor(
          return results.faceLandmarks().mapNotNull { faceLandmarks ->
              val xs = faceLandmarks.map { it.x() }
              val ys = faceLandmarks.map { it.y() }
-             val left = xs.minOrNull()?.toInt() ?: return@mapNotNull null
-             val top = ys.minOrNull()?.toInt() ?: return@mapNotNull null
-             val right = xs.maxOrNull()?.toInt() ?: return@mapNotNull null
-             val bottom = ys.maxOrNull()?.toInt() ?: return@mapNotNull null
+             val imageWidth = image.width
+             val imageHeight = image.height
+
+             val left = (xs.minOrNull()!! * imageWidth).toInt()
+             val top = (ys.minOrNull()!! * imageHeight).toInt()
+             val right = (xs.maxOrNull()!! * imageWidth).toInt()
+             val bottom = (ys.maxOrNull()!! * imageHeight).toInt()
+
              Rect(left, top, right, bottom)
              }
          }
