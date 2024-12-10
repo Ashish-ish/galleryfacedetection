@@ -9,11 +9,11 @@ plugins {
 }
 
 android {
-    namespace = "com.example.galleryfacedetection"
+    namespace = "com.ashish.galleryfacedetection"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.example.galleryfacedetection"
+        applicationId = "com.ashish.galleryfacedetection"
         minSdk = 24
         targetSdk = 34
         versionCode = 1
