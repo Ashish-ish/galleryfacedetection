@@ -3,7 +3,8 @@ The GalleryFaceDetection App detects human faces in gallery images, displays the
 Key Features
 	1.	Image Permission Management: The app requests permission to access the gallery to fetch images.
 	2.	Face Detection:
-	•	Converts images to ARGB_8888 format.
+	•	Converts images to a down scaled bitmap.
+	•	Down scaled images are then ensured for ARGB_8888 format.
 	•	Feeds images in batches to the MediaPipe SDK for face detection using parallel processing.
 	3.	Bounding Box Display: Displays bounding boxes around detected faces on the images.
 	4.	Face Tagging: Allows users to tag faces for identification.
@@ -35,7 +36,7 @@ The app uses Clean Architecture to separate concerns:
 	•	Handle denied/accepted permissions with feedback to the user.
 
 2. Image Loading and Preprocessing
-	•	Component: ImageLoader
+	•	Component: FaceDetectionRepository
 	•	Steps:
 	1.	Fetch images from the camera gallery.
 	2.	Convert images to ARGB_8888 format using Bitmap.createBitmap().
@@ -50,10 +51,10 @@ The app uses Clean Architecture to separate concerns:
 4. Bounding Box Display
 	•	Component: ImageWithBoundingBoxes
 	•	Steps:
-	•	Render images with bounding boxes using Compose Canvas.
+	•	Render images as down scaled bitmaps with bounding boxes using Compose Canvas.
 
 5. Face Tagging
-	•	Component: FaceDetectionRepository
+	•	Component: TaggingRepository
 	•	Steps:
 	1.	Capture user input for tagging.
 	2.	Persist tagged data (face ID, image URI, tag) to the Room database.
